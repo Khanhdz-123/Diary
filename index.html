@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Góc Nhật Ký</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="workspace-header">
+      <div class="workspace-brand" title="Không gian nhật ký cá nhân">
+        <div class="brand-avatar">N</div>
+        <span class="brand-title">Nhật Ký Của Tôi</span>
+      </div>
+      <button class="icon-btn" id="toggleSidebarInner" title="Thu gọn thanh bên">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-input-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7E786E" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="searchInput" placeholder="Tìm nhật ký..." />
+      </div>
+    </div>
+
+    <div class="sidebar-section-label">
+      <span>Danh sách nhật ký</span>
+      <span id="pageCountLabel">0</span>
+    </div>
+
+    <div class="page-list" id="pageList"></div>
+
+    <div class="sidebar-footer">
+      <button class="new-page-btn" id="createPageBtn">
+        <span>+</span> Tạo nhật ký mới
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" id="openSidebarBtn" title="Mở thanh bên" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="breadcrumb" id="topbarBreadcrumb">
+          <span id="topbarEmoji"></span>
+          <span id="topbarTitle">Chưa có nhật ký</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <span id="wordCount">0 từ</span>
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span id="saveStatus">Đã lưu</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Trạng thái trống khi chưa có nhật ký nào -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-card">
+        <div class="empty-icon">🕯️</div>
+        <h1 class="empty-title">Chưa có trang nhật ký nào</h1>
+        <p class="empty-desc">
+          Không gian này đang trống và sẵn sàng cho những dòng đầu tiên của bạn. Tạo một trang nhật ký mới để bắt đầu ghi lại suy nghĩ, kế hoạch hoặc câu chuyện hằng ngày.
+        </p>
+        <button class="empty-create-btn" id="emptyCreateBtn">+ Tạo nhật ký đầu tiên</button>
+      </div>
+    </div>
+
+    <!-- Khu vực soạn thảo -->
+    <div class="editor-scroll" id="editorScroll" style="display: none;">
+      <div class="page-cover" id="pageCover">
+        <div class="cover-controls">
+          <button class="cover-pill-btn" id="changeCoverBtn">Đổi màu bìa ấm</button>
+        </div>
+      </div>
+
+      <div class="page-container">
+        <div class="page-icon-wrapper">
+          <button class="page-icon-btn" id="pageIconBtn" title="Đổi biểu tượng">🕯️</button>
+          <div class="emoji-popover" id="emojiPopover"></div>
+        </div>
+
+        <input type="text" class="page-title-input" id="pageTitleInput" placeholder="Tiêu đề nhật ký..." />
+
+        <div class="page-meta-bar">
+          <span class="meta-tag" id="pageTag">Nhật ký</span>
+          <span id="pageUpdatedAt">Vừa tạo</span>
+          <span>• Gõ <strong>/</strong> để mở menu chèn khối</span>
+        </div>
+
+        <div class="blocks-container" id="blocksContainer"></div>
+
+        <div class="add-block-bar">
+          <button class="quick-insert-btn" onclick="appendBlock('p')">+ Đoạn văn</button>
+          <button class="quick-insert-btn" onclick="appendBlock('h1')">H1 Tiêu đề lớn</button>
+          <button class="quick-insert-btn" onclick="appendBlock('h2')">H2 Tiêu đề nhỏ</button>
+          <button class="quick-insert-btn" onclick="appendBlock('todo')">☑ Việc cần làm</button>
+          <button class="quick-insert-btn" onclick="appendBlock('callout')">💡 Ghi chú nổi bật</button>
+          <button class="quick-insert-btn" onclick="appendBlock('quote')">❝ Trích dẫn</button>
+          <button class="quick-insert-btn" onclick="appendBlock('code')">&lt;/&gt; Khối mã</button>
+          <button class="quick-insert-btn" onclick="appendBlock('divider')">— Đường kẻ</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- SLASH COMMAND MENU -->
+  <div class="slash-menu" id="slashMenu">
+    <div class="slash-menu-header">Chèn khối nội dung</div>
+    <button class="slash-item" data-type="p"><span class="slash-badge">T</span> Văn bản thường</button>
+    <button class="slash-item" data-type="h1"><span class="slash-badge">H1</span> Tiêu đề lớn</button>
+    <button class="slash-item" data-type="h2"><span class="slash-badge">H2</span> Tiêu đề vừa</button>
+    <button class="slash-item" data-type="todo"><span class="slash-badge">✓</span> Danh sách việc làm</button>
+    <button class="slash-item" data-type="callout"><span class="slash-badge">💡</span> Hộp ghi chú ấm</button>
+    <button class="slash-item" data-type="quote"><span class="slash-badge">”</span> Trích dẫn</button>
+    <button class="slash-item" data-type="code"><span class="slash-badge">&lt;/&gt;</span> Khối mã lệnh</button>
+    <button class="slash-item" data-type="divider"><span class="slash-badge">—</span> Đường phân cách</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
