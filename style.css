@@ -247,6 +247,15 @@ body {
   text-overflow: ellipsis;
 }
 
+.page-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.rename-page-btn,
 .delete-page-btn {
   opacity: 0;
   background: transparent;
@@ -258,13 +267,28 @@ body {
   cursor: pointer;
 }
 
+.page-item:hover .rename-page-btn,
 .page-item:hover .delete-page-btn {
   opacity: 1;
 }
 
+.rename-page-btn:hover,
 .delete-page-btn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.rename-page-input {
+  width: 150px;
+  min-width: 0;
+  background: var(--bg-main);
+  border: 1px solid var(--accent-warm);
+  border-radius: 4px;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  padding: 3px 6px;
 }
 
 .sidebar-footer {
@@ -431,6 +455,9 @@ body {
   height: 148px;
   width: 100%;
   position: relative;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   transition: background 0.3s ease;
 }
 
@@ -840,6 +867,11 @@ body {
     height: 100vh;
     left: 0;
     top: 0;
+  }
+
+  .cover-controls {
+    opacity: 1;
+    right: 12px;
   }
 
   .page-container {

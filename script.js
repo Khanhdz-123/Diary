@@ -62,10 +62,16 @@ function init() {
 
 function saveState() {
   saveStatusEl.textContent = 'Đang lưu...';
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    pages: state.pages,
-    activePageId: state.activePageId
-  }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      pages: state.pages,
+      activePageId: state.activePageId
+    }));
+  } catch (error) {
+    saveStatusEl.textContent = 'Không thể lưu';
+    alert('Ảnh bìa này quá lớn để lưu trên thiết bị. Hãy thử chọn ảnh nhỏ hơn.');
+    return;
+  }
   setTimeout(() => {
     saveStatusEl.textContent = 'Đã lưu';
   }, 250);
@@ -129,7 +135,10 @@ function renderSidebar() {
         <span>${page.emoji}</span>
         <span class="page-item-title">${escapeHtml(page.title || 'Nhật ký chưa đặt tên')}</span>
       </div>
-      <button class="delete-page-btn" title="Xóa nhật ký" data-delete="${page.id}">×</button>
+      <div class="page-item-actions">
+        <button class="rename-page-btn" title="Đổi tên nhật ký" aria-label="Đổi tên nhật ký" data-rename="${page.id}">✎</button>
+        <button class="delete-page-btn" title="Xóa nhật ký" data-delete="${page.id}">×</button>
+      </div>
     </div>
   `).join('');
 }
@@ -149,7 +158,11 @@ function renderActivePage() {
   emptyStateEl.style.display = 'none';
   editorScrollEl.style.display = 'block';
 
-  pageCoverEl.style.background = COVER_GRADIENTS[page.coverIndex % COVER_GRADIENTS.length];
+  if (page.coverImage) {
+    pageCoverEl.style.background = `url("${page.coverImage}") center / cover no-repeat`;
+  } else {
+    pageCoverEl.style.background = COVER_GRADIENTS[page.coverIndex % COVER_GRADIENTS.length];
+  }
   pageIconBtn.textContent = page.emoji;
   pageTitleInput.value = page.title;
   pageTagEl.textContent = page.tag || 'Nhật ký';
@@ -350,6 +363,87 @@ function escapeHtml(str) {
   }[m]));
 }
 
+function resizeCoverImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Vui lòng chọn tệp hình ảnh.'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const maxWidth = 1600;
+        const maxHeight = 900;
+        const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+        const width = Math.round(image.width * scale);
+        const height = Math.round(image.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#1C1B19';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      image.onerror = () => reject(new Error('Không thể đọc ảnh này.'));
+      image.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Không thể mở tệp ảnh.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function startRenamePage(pageId) {
+  const page = state.pages.find(p => p.id === pageId);
+  if (!page) return;
+
+  const item = Array.from(pageListEl.querySelectorAll('.page-item'))
+    .find(el => el.dataset.id === pageId);
+  const titleEl = item?.querySelector('.page-item-title');
+  if (!item || !titleEl) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'rename-page-input';
+  input.value = page.title || '';
+  input.placeholder = 'Tên nhật ký';
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finishRename = (cancel = false) => {
+    if (finished) return;
+    finished = true;
+    if (!cancel) {
+      const nextTitle = input.value.trim();
+      page.title = nextTitle;
+      saveState();
+      if (page.id === state.activePageId) {
+        pageTitleInput.value = nextTitle;
+        topbarTitle.textContent = nextTitle || 'Nhật ký chưa đặt tên';
+        updateWordCount();
+      }
+    }
+    renderSidebar();
+  };
+
+  input.addEventListener('blur', () => finishRename(false));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+    e.preventDefault();
+      input.blur();
+    } else if (e.key === 'Escape') {
+    e.preventDefault();
+      finishRename(true);
+    }
+  });
+}
+
 function bindEvents() {
   const sidebar = document.getElementById('sidebar');
   const openBtn = document.getElementById('openSidebarBtn');
@@ -368,6 +462,13 @@ function bindEvents() {
   });
 
   pageListEl.addEventListener('click', (e) => {
+    const renameId = e.target.dataset.rename;
+    if (renameId) {
+      e.stopPropagation();
+      startRenamePage(renameId);
+      return;
+    }
+
     const delId = e.target.dataset.delete;
     if (delId) {
       e.stopPropagation();
@@ -390,6 +491,14 @@ function bindEvents() {
     }
   });
 
+  pageListEl.addEventListener('dblclick', (e) => {
+    const item = e.target.closest('.page-item');
+    if (!item || e.target.closest('.delete-page-btn') || e.target.closest('.rename-page-btn')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startRenamePage(item.dataset.id);
+  });
+
   document.getElementById('createPageBtn').addEventListener('click', createNewJournal);
   document.getElementById('emptyCreateBtn').addEventListener('click', createNewJournal);
 
@@ -404,11 +513,23 @@ function bindEvents() {
   });
 
   document.getElementById('changeCoverBtn').addEventListener('click', () => {
+    document.getElementById('coverImageInput').click();
+  });
+
+  document.getElementById('coverImageInput').addEventListener('change', async (e) => {
     const page = getActivePage();
-    if (!page) return;
-    page.coverIndex = (page.coverIndex + 1) % COVER_GRADIENTS.length;
-    saveState();
-    renderActivePage();
+    const file = e.target.files?.[0];
+    if (!page || !file) return;
+
+    try {
+      page.coverImage = await resizeCoverImage(file);
+      saveState();
+      renderActivePage();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      e.target.value = '';
+    }
   });
 
   pageIconBtn.addEventListener('click', (e) => {
