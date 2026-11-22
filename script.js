@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'cozy_warm_dark_journal_v1';
+const USERS_STORAGE_KEY = 'cozy_journal_users_v1';
+const SESSION_STORAGE_KEY = 'cozy_journal_session_v1';
 
 const COVER_GRADIENTS = [
   'linear-gradient(120deg, #2C2722 0%, #4A4034 55%, #1E1C19 100%)',
@@ -35,6 +37,75 @@ const topbarTitle = document.getElementById('topbarTitle');
 const wordCountEl = document.getElementById('wordCount');
 const saveStatusEl = document.getElementById('saveStatus');
 const slashMenu = document.getElementById('slashMenu');
+const userAvatarEl = document.getElementById('userAvatar');
+const currentUserNameEl = document.getElementById('currentUserName');
+const currentUserEmailEl = document.getElementById('currentUserEmail');
+const logoutBtn = document.getElementById('logoutBtn');
+
+function getActiveSessionUser() {
+  try {
+    const rawSession = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!rawSession) return null;
+    const session = JSON.parse(rawSession);
+    if (!session?.userId) return null;
+
+    const rawUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    const users = rawUsers ? JSON.parse(rawUsers) : [];
+    if (!Array.isArray(users)) return null;
+    return users.find(u => u.id === session.userId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function renderUserProfile() {
+  const user = getActiveSessionUser();
+  if (!user) {
+    userAvatarEl.textContent = 'N';
+    currentUserNameEl.textContent = 'Khách';
+    currentUserEmailEl.textContent = 'Chưa đăng nhập phiên';
+    return;
+  }
+
+  const displayName = user.name || user.email?.split('@')[0] || 'Người dùng';
+  const initial = displayName.charAt(0).toUpperCase();
+  currentUserNameEl.textContent = displayName;
+  currentUserEmailEl.textContent = user.email || '';
+
+  if (!user.photoURL) {
+    userAvatarEl.textContent = initial;
+    return;
+  }
+
+  userAvatarEl.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = user.photoURL;
+  img.alt = displayName;
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => {
+    userAvatarEl.textContent = initial;
+  });
+  userAvatarEl.appendChild(img);
+}
+
+async function handleLogout() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+
+  try {
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js');
+    const { getAuth, signOut } = await import('https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js');
+    if (getApps().length > 0) {
+      const auth = getAuth(getApps()[0]);
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+    }
+  } catch {
+    // Bỏ qua nếu phiên hiện tại chỉ lưu ở localStorage
+  }
+
+  window.location.href = './register/register.html';
+}
 
 function init() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -54,6 +125,7 @@ function init() {
     state.activePageId = null;
   }
 
+  renderUserProfile();
   renderEmojiPicker();
   renderSidebar();
   renderActivePage();
@@ -136,8 +208,8 @@ function renderSidebar() {
         <span class="page-item-title">${escapeHtml(page.title || 'Nhật ký chưa đặt tên')}</span>
       </div>
       <div class="page-item-actions">
-        <button class="rename-page-btn" title="Đổi tên nhật ký" aria-label="Đổi tên nhật ký" data-rename="${page.id}">✎</button>
-        <button class="delete-page-btn" title="Xóa nhật ký" data-delete="${page.id}">×</button>
+        <button class="rename-page-btn" type="button" title="Đổi tên nhật ký" aria-label="Đổi tên nhật ký" data-rename="${page.id}">✎</button>
+        <button class="delete-page-btn" type="button" title="Xóa nhật ký" data-delete="${page.id}">×</button>
       </div>
     </div>
   `).join('');
@@ -186,8 +258,8 @@ function createBlockElement(block) {
   const actions = document.createElement('div');
   actions.className = 'block-actions';
   actions.innerHTML = `
-    <button class="block-action-btn" title="Thêm khối bên dưới" data-action="add">+</button>
-    <button class="block-action-btn" title="Xóa khối" data-action="delete">×</button>
+    <button class="block-action-btn" type="button" title="Thêm khối bên dưới" data-action="add">+</button>
+    <button class="block-action-btn" type="button" title="Xóa khối" data-action="delete">×</button>
   `;
   row.appendChild(actions);
 
@@ -435,10 +507,10 @@ function startRenamePage(pageId) {
   input.addEventListener('blur', () => finishRename(false));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-    e.preventDefault();
+      e.preventDefault();
       input.blur();
     } else if (e.key === 'Escape') {
-    e.preventDefault();
+      e.preventDefault();
       finishRename(true);
     }
   });
@@ -455,6 +527,8 @@ function bindEvents() {
     sidebar.classList.remove('collapsed');
     openBtn.style.display = 'none';
   });
+
+  logoutBtn?.addEventListener('click', handleLogout);
 
   searchInput.addEventListener('input', (e) => {
     state.searchQuery = e.target.value;

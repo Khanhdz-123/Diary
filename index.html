@@ -42,9 +42,21 @@
     <div class="page-list" id="pageList"></div>
 
     <div class="sidebar-footer">
-      <button class="new-page-btn" id="createPageBtn">
+      <button class="new-page-btn" id="createPageBtn" type="button">
         <span>+</span> Tạo nhật ký mới
       </button>
+      <div class="user-account-box" id="userAccountBox">
+        <div class="user-profile-row">
+          <div class="user-avatar" id="userAvatar">N</div>
+          <div class="user-meta">
+            <div class="user-name" id="currentUserName">Người dùng</div>
+            <div class="user-email" id="currentUserEmail">Tài khoản cá nhân</div>
+          </div>
+        </div>
+        <button class="logout-btn" id="logoutBtn" type="button" title="Đăng xuất khỏi tài khoản">
+          Đăng xuất
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -82,7 +94,7 @@
         <p class="empty-desc">
           Không gian này đang trống và sẵn sàng cho những dòng đầu tiên của bạn. Tạo một trang nhật ký mới để bắt đầu ghi lại suy nghĩ, kế hoạch hoặc câu chuyện hằng ngày.
         </p>
-        <button class="empty-create-btn" id="emptyCreateBtn">+ Tạo nhật ký đầu tiên</button>
+        <button class="empty-create-btn" id="emptyCreateBtn" type="button">+ Tạo nhật ký đầu tiên</button>
       </div>
     </div>
 
@@ -97,7 +109,7 @@
 
       <div class="page-container">
         <div class="page-icon-wrapper">
-          <button class="page-icon-btn" id="pageIconBtn" title="Đổi biểu tượng">🕯️</button>
+          <button class="page-icon-btn" id="pageIconBtn" title="Đổi biểu tượng" type="button">🕯️</button>
           <div class="emoji-popover" id="emojiPopover"></div>
         </div>
 
@@ -112,14 +124,14 @@
         <div class="blocks-container" id="blocksContainer"></div>
 
         <div class="add-block-bar">
-          <button class="quick-insert-btn" onclick="appendBlock('p')">+ Đoạn văn</button>
-          <button class="quick-insert-btn" onclick="appendBlock('h1')">H1 Tiêu đề lớn</button>
-          <button class="quick-insert-btn" onclick="appendBlock('h2')">H2 Tiêu đề nhỏ</button>
-          <button class="quick-insert-btn" onclick="appendBlock('todo')">☑ Việc cần làm</button>
-          <button class="quick-insert-btn" onclick="appendBlock('callout')">💡 Ghi chú nổi bật</button>
-          <button class="quick-insert-btn" onclick="appendBlock('quote')">❝ Trích dẫn</button>
-          <button class="quick-insert-btn" onclick="appendBlock('code')">&lt;/&gt; Khối mã</button>
-          <button class="quick-insert-btn" onclick="appendBlock('divider')">— Đường kẻ</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('p')">+ Đoạn văn</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('h1')">H1 Tiêu đề lớn</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('h2')">H2 Tiêu đề nhỏ</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('todo')">☑ Việc cần làm</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('callout')">💡 Ghi chú nổi bật</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('quote')">❝ Trích dẫn</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('code')">&lt;/&gt; Khối mã</button>
+          <button class="quick-insert-btn" type="button" onclick="appendBlock('divider')">— Đường kẻ</button>
         </div>
       </div>
     </div>
@@ -128,14 +140,14 @@
   <!-- SLASH COMMAND MENU -->
   <div class="slash-menu" id="slashMenu">
     <div class="slash-menu-header">Chèn khối nội dung</div>
-    <button class="slash-item" data-type="p"><span class="slash-badge">T</span> Văn bản thường</button>
-    <button class="slash-item" data-type="h1"><span class="slash-badge">H1</span> Tiêu đề lớn</button>
-    <button class="slash-item" data-type="h2"><span class="slash-badge">H2</span> Tiêu đề vừa</button>
-    <button class="slash-item" data-type="todo"><span class="slash-badge">✓</span> Danh sách việc làm</button>
-    <button class="slash-item" data-type="callout"><span class="slash-badge">💡</span> Hộp ghi chú ấm</button>
-    <button class="slash-item" data-type="quote"><span class="slash-badge">”</span> Trích dẫn</button>
-    <button class="slash-item" data-type="code"><span class="slash-badge">&lt;/&gt;</span> Khối mã lệnh</button>
-    <button class="slash-item" data-type="divider"><span class="slash-badge">—</span> Đường phân cách</button>
+    <button class="slash-item" type="button" data-type="p"><span class="slash-badge">T</span> Văn bản thường</button>
+    <button class="slash-item" type="button" data-type="h1"><span class="slash-badge">H1</span> Tiêu đề lớn</button>
+    <button class="slash-item" type="button" data-type="h2"><span class="slash-badge">H2</span> Tiêu đề vừa</button>
+    <button class="slash-item" type="button" data-type="todo"><span class="slash-badge">✓</span> Danh sách việc làm</button>
+    <button class="slash-item" type="button" data-type="callout"><span class="slash-badge">💡</span> Hộp ghi chú ấm</button>
+    <button class="slash-item" type="button" data-type="quote"><span class="slash-badge">”</span> Trích dẫn</button>
+    <button class="slash-item" type="button" data-type="code"><span class="slash-badge">&lt;/&gt;</span> Khối mã lệnh</button>
+    <button class="slash-item" type="button" data-type="divider"><span class="slash-badge">—</span> Đường phân cách</button>
   </div>
 
   <script src="script.js"></script>
