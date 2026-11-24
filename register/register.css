@@ -1146,6 +1146,11 @@ body {
     top: 0;
   }
 
+  .cover-controls {
+    opacity: 1;
+    right: 12px;
+  }
+
   .page-container {
     padding: 0 20px;
   }

@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   FacebookAuthProvider,
   signInWithPopup,
+  linkWithCredential,
   signOut,
   onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js';
@@ -30,6 +31,7 @@ if (hasFirebaseConfig) {
   auth = getAuth(app);
   googleProvider = new GoogleAuthProvider();
   facebookProvider = new FacebookAuthProvider();
+  facebookProvider.addScope('email');
 }
 
 const USERS_STORAGE_KEY = 'cozy_journal_users_v1';
@@ -44,10 +46,13 @@ const COVER_GRADIENTS = [
   'linear-gradient(120deg, #22201E 0%, #35312C 100%)'
 ];
 
-const EMOJIS = ['☕', '🕯️', '📖', '🍂', '🪴', '✍️', '🌙', '🎧', '🪵', '💡', '🍵', '🧭', '📌', '🎨', '💻', '✨', '🏡', '🧸'];
+const EMOJIS = ['☕', '🕯️', '📖', '🍂', '🌱', '✍️', '🌙', '🎧', '🪑', '💡', '🍵', '🧭', '📌', '🎨', '💻', '✨', '🏡', '🧸'];
+const LEGACY_EMOJI_FALLBACKS = { '🪴': '🌱', '🪵': '🪑' };
 
 let authMode = 'login';
 let currentUser = null;
+let pendingFacebookCredential = null;
+let pendingFacebookEmail = '';
 
 let state = {
   pages: [],
@@ -275,17 +280,32 @@ async function handleOAuthSignIn(provider, label) {
     return;
   }
 
+  let linkingFacebook = false;
   try {
     const result = await signInWithPopup(auth, provider);
-    const u = result.user;
+    let u = result.user;
+
+    if (label === 'Google' && pendingFacebookCredential) {
+      const signedInEmail = (u.email || '').toLowerCase();
+      if (pendingFacebookEmail && signedInEmail !== pendingFacebookEmail) {
+        await signOut(auth);
+        authErrorEl.textContent =
+          `Hãy đăng nhập Google bằng email ${pendingFacebookEmail} để liên kết Facebook.`;
+        return;
+      }
+
+      linkingFacebook = true;
+      const linkedResult = await linkWithCredential(u, pendingFacebookCredential);
+      u = linkedResult.user;
+      pendingFacebookCredential = null;
+      pendingFacebookEmail = '';
+      linkingFacebook = false;
+    }
+
     let photoURL = extractPhotoURL(u);
 
     if (label === 'Facebook') {
-      const cred = FacebookAuthProvider.credentialFromResult(result);
-      const fbUid = u.providerData?.[0]?.uid;
-      if (cred?.accessToken && fbUid) {
-        photoURL = `https://graph.facebook.com/${fbUid}/picture?type=large&access_token=${encodeURIComponent(cred.accessToken)}`;
-      }
+      photoURL = extractPhotoURL(u);
     }
 
     const profile = upsertOAuthUser({
@@ -300,6 +320,49 @@ async function handleOAuthSignIn(provider, label) {
     enterWorkspace(profile);
   } catch (err) {
     if (err?.code === 'auth/popup-closed-by-user') return;
+
+    if (err?.code === 'auth/account-exists-with-different-credential' && label === 'Facebook') {
+      pendingFacebookCredential = FacebookAuthProvider.credentialFromError(err);
+      pendingFacebookEmail = (err.customData?.email || '').toLowerCase();
+      if (pendingFacebookCredential) {
+        const accountEmail = pendingFacebookEmail ? ` (${pendingFacebookEmail})` : '';
+        authErrorEl.textContent =
+          `Tài khoản${accountEmail} đã được đăng ký bằng một phương thức khác, thường là Google. ` +
+          'Bấm "Tiếp tục với Google" bằng đúng email đó để đăng nhập và liên kết Facebook.';
+        return;
+      }
+    }
+
+    if (linkingFacebook) {
+      if (err?.code === 'auth/credential-already-in-use') {
+        pendingFacebookCredential = null;
+        pendingFacebookEmail = '';
+        const message =
+          'Tài khoản Facebook này đã được liên kết với một tài khoản nhật ký khác.';
+        authErrorEl.textContent = message;
+        alert(message);
+      } else {
+        const message =
+          `Đã đăng nhập Google nhưng chưa liên kết được Facebook (${err?.code || 'lỗi Firebase'}). ` +
+          'Bạn vẫn có thể dùng tài khoản Google.';
+        authErrorEl.textContent = message;
+        alert(message);
+      }
+      return;
+    }
+
+    if (err?.code === 'auth/unauthorized-domain') {
+      authErrorEl.textContent =
+        'Tên miền website chưa được thêm vào Firebase Authentication > Authorized domains.';
+      return;
+    }
+
+    if (err?.code === 'auth/operation-not-allowed') {
+      authErrorEl.textContent =
+        `Đăng nhập ${label} chưa được bật trong Firebase Authentication > Sign-in method.`;
+      return;
+    }
+
     authErrorEl.textContent = `Đăng nhập ${label} thất bại (${err?.code || 'lỗi OAuth'}). Kiểm tra cấu hình Firebase/Domain.`;
   }
 }
@@ -314,11 +377,20 @@ function loadUserJournals(userId) {
     try {
       const parsed = JSON.parse(raw);
       state.pages = Array.isArray(parsed.pages) ? parsed.pages : [];
+      let migratedEmoji = false;
+      state.pages.forEach(page => {
+        const replacement = LEGACY_EMOJI_FALLBACKS[page.emoji];
+        if (replacement) {
+          page.emoji = replacement;
+          migratedEmoji = true;
+        }
+      });
       state.activePageId = state.pages.some(p => p.id === parsed.activePageId)
         ? parsed.activePageId
         : (state.pages[0]?.id || null);
       state.searchQuery = '';
       searchInput.value = '';
+      if (migratedEmoji) saveState();
       return;
     } catch {
       // Fallback nếu dữ liệu lỗi
@@ -334,16 +406,24 @@ function loadUserJournals(userId) {
 function saveState() {
   if (!currentUser) return;
   saveStatusEl.textContent = 'Đang lưu...';
-  localStorage.setItem(
-    getJournalStorageKey(currentUser.id),
-    JSON.stringify({
-      pages: state.pages,
-      activePageId: state.activePageId
-    })
-  );
+  try {
+    localStorage.setItem(
+      getJournalStorageKey(currentUser.id),
+      JSON.stringify({
+        pages: state.pages,
+        activePageId: state.activePageId
+      })
+    );
+  } catch (error) {
+    saveStatusEl.textContent = 'Không thể lưu';
+    saveStatusEl.title = error.message || 'Không đủ dung lượng lưu dữ liệu trên thiết bị.';
+    return false;
+  }
+  saveStatusEl.title = '';
   setTimeout(() => {
     saveStatusEl.textContent = 'Đã lưu';
   }, 250);
+  return true;
 }
 
 function bindAuthEvents() {
@@ -524,7 +604,11 @@ function renderActivePage() {
   emptyStateEl.style.display = 'none';
   editorScrollEl.style.display = 'block';
 
-  pageCoverEl.style.background = COVER_GRADIENTS[page.coverIndex % COVER_GRADIENTS.length];
+  if (page.coverImage) {
+    pageCoverEl.style.background = `url("${page.coverImage}") center / cover no-repeat`;
+  } else {
+    pageCoverEl.style.background = COVER_GRADIENTS[page.coverIndex % COVER_GRADIENTS.length];
+  }
   pageIconBtn.textContent = page.emoji;
   pageTitleInput.value = page.title;
   pageTagEl.textContent = page.tag || 'Nhật ký';
@@ -719,6 +803,47 @@ function updateWordCount() {
   wordCountEl.textContent = `${words} từ`;
 }
 
+function resizeCoverImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Vui lòng chọn tệp hình ảnh.'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(1280 / image.width, 720 / image.height, 1);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#1C1B19';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Không thể xử lý ảnh này.'));
+            return;
+          }
+          const resultReader = new FileReader();
+          resultReader.onload = () => resolve(resultReader.result);
+          resultReader.onerror = () => reject(new Error('Không thể đọc ảnh đã xử lý.'));
+          resultReader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.76);
+      };
+      image.onerror = () => reject(new Error('Không thể đọc ảnh này.'));
+      image.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Không thể mở tệp ảnh.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function escapeHtml(str) {
   return str.replace(/[&<>"']/g, m => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -768,6 +893,11 @@ function bindWorkspaceEvents() {
   document.getElementById('createPageBtn').addEventListener('click', createNewJournal);
   document.getElementById('emptyCreateBtn').addEventListener('click', createNewJournal);
 
+  document.querySelector('.add-block-bar').addEventListener('click', (e) => {
+    const button = e.target.closest('[data-insert]');
+    if (button) appendBlock(button.dataset.insert);
+  });
+
   pageTitleInput.addEventListener('input', (e) => {
     const page = getActivePage();
     if (!page) return;
@@ -779,11 +909,27 @@ function bindWorkspaceEvents() {
   });
 
   document.getElementById('changeCoverBtn').addEventListener('click', () => {
+    document.getElementById('coverImageInput').click();
+  });
+
+  document.getElementById('coverImageInput').addEventListener('change', async (e) => {
     const page = getActivePage();
-    if (!page) return;
-    page.coverIndex = (page.coverIndex + 1) % COVER_GRADIENTS.length;
-    saveState();
-    renderActivePage();
+    const file = e.target.files?.[0];
+    if (!page || !file) return;
+
+    const previousCover = page.coverImage;
+    try {
+      page.coverImage = await resizeCoverImage(file);
+      if (!saveState()) {
+        page.coverImage = previousCover;
+        alert('Không đủ dung lượng lưu ảnh bìa. Hãy thử chọn ảnh nhỏ hơn hoặc xóa bớt nhật ký.');
+      }
+      renderActivePage();
+    } catch (error) {
+      alert(error.message || 'Không thể cập nhật ảnh bìa.');
+    } finally {
+      e.target.value = '';
+    }
   });
 
   pageIconBtn.addEventListener('click', (e) => {

@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Đăng nhập</title>
+  <title>Nhật Ký</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="register.css" />
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
 </head>
 <body>
   <section class="auth-screen" id="authScreen">
@@ -196,7 +197,8 @@
       <div class="editor-scroll" id="editorScroll" style="display: none;">
         <div class="page-cover" id="pageCover">
           <div class="cover-controls">
-            <button class="cover-pill-btn" id="changeCoverBtn">Đổi màu bìa ấm</button>
+            <button class="cover-pill-btn" id="changeCoverBtn" type="button">Thay đổi ảnh bìa</button>
+            <input type="file" id="coverImageInput" accept="image/*" hidden />
           </div>
         </div>
 
@@ -217,14 +219,14 @@
           <div class="blocks-container" id="blocksContainer"></div>
 
           <div class="add-block-bar">
-            <button class="quick-insert-btn" onclick="appendBlock('p')">+ Đoạn văn</button>
-            <button class="quick-insert-btn" onclick="appendBlock('h1')">H1 Tiêu đề lớn</button>
-            <button class="quick-insert-btn" onclick="appendBlock('h2')">H2 Tiêu đề nhỏ</button>
-            <button class="quick-insert-btn" onclick="appendBlock('todo')">☑ Việc cần làm</button>
-            <button class="quick-insert-btn" onclick="appendBlock('callout')">💡 Ghi chú nổi bật</button>
-            <button class="quick-insert-btn" onclick="appendBlock('quote')">❝ Trích dẫn</button>
-            <button class="quick-insert-btn" onclick="appendBlock('code')">&lt;/&gt; Khối mã</button>
-            <button class="quick-insert-btn" onclick="appendBlock('divider')">— Đường kẻ</button>
+            <button class="quick-insert-btn" type="button" data-insert="p">+ Đoạn văn</button>
+            <button class="quick-insert-btn" type="button" data-insert="h1">H1 Tiêu đề lớn</button>
+            <button class="quick-insert-btn" type="button" data-insert="h2">H2 Tiêu đề nhỏ</button>
+            <button class="quick-insert-btn" type="button" data-insert="todo">☑ Việc cần làm</button>
+            <button class="quick-insert-btn" type="button" data-insert="callout">💡 Ghi chú nổi bật</button>
+            <button class="quick-insert-btn" type="button" data-insert="quote">❝ Trích dẫn</button>
+            <button class="quick-insert-btn" type="button" data-insert="code">&lt;/&gt; Khối mã</button>
+            <button class="quick-insert-btn" type="button" data-insert="divider">— Đường kẻ</button>
           </div>
         </div>
       </div>

@@ -573,6 +573,11 @@ function bindEvents() {
     startRenamePage(item.dataset.id);
   });
 
+  document.querySelector('.add-block-bar').addEventListener('click', (e) => {
+    const button = e.target.closest('[data-insert]');
+    if (button) appendBlock(button.dataset.insert);
+  });
+
   document.getElementById('createPageBtn').addEventListener('click', createNewJournal);
   document.getElementById('emptyCreateBtn').addEventListener('click', createNewJournal);
 
