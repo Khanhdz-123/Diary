@@ -3,7 +3,10 @@ import {
   getAuth,
   GoogleAuthProvider,
   FacebookAuthProvider,
+  OAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   linkWithCredential,
   signOut,
   onAuthStateChanged
@@ -37,6 +40,9 @@ if (hasFirebaseConfig) {
 const USERS_STORAGE_KEY = 'cozy_journal_users_v1';
 const SESSION_STORAGE_KEY = 'cozy_journal_session_v1';
 const JOURNAL_PREFIX = 'cozy_journal_data_';
+const REDIRECT_PROVIDER_KEY = 'cozy_journal_oauth_redirect_provider_v1';
+const PENDING_FACEBOOK_CREDENTIAL_KEY = 'cozy_journal_pending_facebook_credential_v1';
+const PENDING_FACEBOOK_EMAIL_KEY = 'cozy_journal_pending_facebook_email_v1';
 
 const COVER_GRADIENTS = [
   'linear-gradient(120deg, #2C2722 0%, #4A4034 55%, #1E1C19 100%)',
@@ -77,6 +83,7 @@ const eyeOffIcon = document.getElementById('eyeOffIcon');
 const googleLoginBtn = document.getElementById('googleLoginBtn');
 const facebookLoginBtn = document.getElementById('facebookLoginBtn');
 const authErrorEl = document.getElementById('authError');
+const inAppBrowserNoticeEl = document.getElementById('inAppBrowserNotice');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
 const switchAuthModeBtn = document.getElementById('switchAuthModeBtn');
 
@@ -103,14 +110,42 @@ const wordCountEl = document.getElementById('wordCount');
 const saveStatusEl = document.getElementById('saveStatus');
 const slashMenu = document.getElementById('slashMenu');
 
+function isInAppBrowser() {
+  return /FBAN|FBAV|FB_IAB|FB4A|FBIOS|Instagram|Messenger|Zalo|TikTok|BytedanceWebview|musical_ly/i
+    .test(navigator.userAgent || '');
+}
+
+function showOAuthError(message, err) {
+  const code = err?.code || 'không có mã lỗi';
+  const details = err?.message || String(err || 'Không có thông tin chi tiết.');
+  authErrorEl.textContent = `${message}\nMã lỗi: ${code}\nChi tiết: ${details}`;
+}
+
+function isPopupFallbackError(err) {
+  const popupErrors = [
+    'auth/popup-blocked',
+    'auth/popup-unsupported',
+    'auth/operation-not-supported-in-this-environment'
+  ];
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  return popupErrors.includes(err?.code) ||
+    (isMobile && err?.code === 'auth/web-storage-unsupported');
+}
+
 function init() {
   renderEmojiPicker();
   bindAuthEvents();
   bindWorkspaceEvents();
+  if (isInAppBrowser()) {
+    inAppBrowserNoticeEl.hidden = false;
+  }
 
   if (auth) {
-    onAuthStateChanged(auth, (fbUser) => {
+    const pendingOAuthRedirect = Boolean(sessionStorage.getItem(REDIRECT_PROVIDER_KEY));
+    const redirectResultPromise = handleRedirectResult();
+    onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
+        if (pendingOAuthRedirect && await redirectResultPromise) return;
         const providerId = fbUser.providerData?.[0]?.providerId || 'oauth';
         const profile = upsertOAuthUser({
           id: `oauth-${fbUser.uid}`,
@@ -272,25 +307,19 @@ function enterWorkspace(user) {
   renderActivePage();
 }
 
-async function handleOAuthSignIn(provider, label) {
-  authErrorEl.textContent = '';
-  if (!auth || !provider) {
-    authErrorEl.textContent =
-      `Chưa điền FIREBASE_CONFIG thật trong register.js nên chưa mở đăng nhập ${label} thật được.`;
-    return;
-  }
-
+async function processOAuthResult(result, label) {
   let linkingFacebook = false;
   try {
-    const result = await signInWithPopup(auth, provider);
     let u = result.user;
 
     if (label === 'Google' && pendingFacebookCredential) {
       const signedInEmail = (u.email || '').toLowerCase();
       if (pendingFacebookEmail && signedInEmail !== pendingFacebookEmail) {
         await signOut(auth);
-        authErrorEl.textContent =
-          `Hãy đăng nhập Google bằng email ${pendingFacebookEmail} để liên kết Facebook.`;
+        showOAuthError(`Hãy đăng nhập Google bằng email ${pendingFacebookEmail} để liên kết Facebook.`, {
+          code: 'auth/email-mismatch',
+          message: `Email Google phải trùng với ${pendingFacebookEmail}.`
+        });
         return;
       }
 
@@ -302,68 +331,143 @@ async function handleOAuthSignIn(provider, label) {
       linkingFacebook = false;
     }
 
-    let photoURL = extractPhotoURL(u);
-
-    if (label === 'Facebook') {
-      photoURL = extractPhotoURL(u);
-    }
-
     const profile = upsertOAuthUser({
       id: `oauth-${u.uid}`,
       name: u.displayName || u.email?.split('@')[0] || `Tài khoản ${label}`,
       email: u.email || `${u.uid}@${label.toLowerCase()}.local`,
-      photoURL,
+      photoURL: extractPhotoURL(u),
       provider: label
     });
     authFormEl.reset();
     resetPasswordVisibility();
     enterWorkspace(profile);
   } catch (err) {
-    if (err?.code === 'auth/popup-closed-by-user') return;
-
-    if (err?.code === 'auth/account-exists-with-different-credential' && label === 'Facebook') {
-      pendingFacebookCredential = FacebookAuthProvider.credentialFromError(err);
-      pendingFacebookEmail = (err.customData?.email || '').toLowerCase();
-      if (pendingFacebookCredential) {
-        const accountEmail = pendingFacebookEmail ? ` (${pendingFacebookEmail})` : '';
-        authErrorEl.textContent =
-          `Tài khoản${accountEmail} đã được đăng ký bằng một phương thức khác, thường là Google. ` +
-          'Bấm "Tiếp tục với Google" bằng đúng email đó để đăng nhập và liên kết Facebook.';
-        return;
-      }
-    }
-
     if (linkingFacebook) {
       if (err?.code === 'auth/credential-already-in-use') {
         pendingFacebookCredential = null;
         pendingFacebookEmail = '';
-        const message =
-          'Tài khoản Facebook này đã được liên kết với một tài khoản nhật ký khác.';
-        authErrorEl.textContent = message;
-        alert(message);
+        showOAuthError(
+          'Tài khoản Facebook này đã được liên kết với một tài khoản nhật ký khác.',
+          err
+        );
       } else {
-        const message =
-          `Đã đăng nhập Google nhưng chưa liên kết được Facebook (${err?.code || 'lỗi Firebase'}). ` +
-          'Bạn vẫn có thể dùng tài khoản Google.';
-        authErrorEl.textContent = message;
-        alert(message);
+        showOAuthError(
+          `Đã đăng nhập Google nhưng chưa liên kết được Facebook (${err?.code || 'lỗi Firebase'}). Bạn vẫn có thể dùng tài khoản Google.`,
+          err
+        );
       }
       return;
     }
 
-    if (err?.code === 'auth/unauthorized-domain') {
-      authErrorEl.textContent =
-        'Tên miền website chưa được thêm vào Firebase Authentication > Authorized domains.';
+    showOAuthError(`Đăng nhập ${label} thất bại.`, err);
+  }
+}
+
+async function handleOAuthError(err, provider, label) {
+  if (err?.code === 'auth/popup-closed-by-user') return;
+
+  if (err?.code === 'auth/account-exists-with-different-credential' && label === 'Facebook') {
+    pendingFacebookCredential = FacebookAuthProvider.credentialFromError(err);
+    pendingFacebookEmail = (err.customData?.email || '').toLowerCase();
+    if (pendingFacebookCredential) {
+      const accountEmail = pendingFacebookEmail ? ` (${pendingFacebookEmail})` : '';
+      showOAuthError(
+        `Tài khoản${accountEmail} đã được đăng ký bằng một phương thức khác, thường là Google. ` +
+        'Bấm "Tiếp tục với Google" bằng đúng email đó để đăng nhập và liên kết Facebook.',
+        err
+      );
       return;
     }
+  }
 
-    if (err?.code === 'auth/operation-not-allowed') {
-      authErrorEl.textContent =
-        `Đăng nhập ${label} chưa được bật trong Firebase Authentication > Sign-in method.`;
+  if (isPopupFallbackError(err)) {
+    try {
+      sessionStorage.setItem(REDIRECT_PROVIDER_KEY, label);
+      if (pendingFacebookCredential) {
+        sessionStorage.setItem(
+          PENDING_FACEBOOK_CREDENTIAL_KEY,
+          JSON.stringify(pendingFacebookCredential.toJSON())
+        );
+        sessionStorage.setItem(PENDING_FACEBOOK_EMAIL_KEY, pendingFacebookEmail);
+      }
+      await signInWithRedirect(auth, provider);
+      return;
+    } catch (redirectError) {
+      sessionStorage.removeItem(REDIRECT_PROVIDER_KEY);
+      sessionStorage.removeItem(PENDING_FACEBOOK_CREDENTIAL_KEY);
+      sessionStorage.removeItem(PENDING_FACEBOOK_EMAIL_KEY);
+      showOAuthError(`Không thể chuyển sang đăng nhập ${label} bằng chuyển hướng.`, redirectError);
       return;
     }
+  }
 
-    authErrorEl.textContent = `Đăng nhập ${label} thất bại (${err?.code || 'lỗi OAuth'}). Kiểm tra cấu hình Firebase/Domain.`;
+  if (err?.code === 'auth/unauthorized-domain') {
+    showOAuthError(
+      'Tên miền website chưa được thêm vào Firebase Authentication > Authorized domains.',
+      err
+    );
+    return;
+  }
+
+  if (err?.code === 'auth/operation-not-allowed') {
+    showOAuthError(
+      `Đăng nhập ${label} chưa được bật trong Firebase Authentication > Sign-in method.`,
+      err
+    );
+    return;
+  }
+
+  showOAuthError(`Đăng nhập ${label} thất bại.`, err);
+}
+
+async function handleOAuthSignIn(provider, label) {
+  authErrorEl.textContent = '';
+  if (!auth || !provider) {
+    authErrorEl.textContent =
+      `Chưa điền FIREBASE_CONFIG thật trong register.js nên chưa mở đăng nhập ${label} thật được.`;
+    return;
+  }
+
+  try {
+    const popupPromise = signInWithPopup(auth, provider);
+    const result = await popupPromise;
+    await processOAuthResult(result, label);
+  } catch (err) {
+    await handleOAuthError(err, provider, label);
+  }
+}
+
+async function handleRedirectResult() {
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result) {
+      sessionStorage.removeItem(REDIRECT_PROVIDER_KEY);
+      sessionStorage.removeItem(PENDING_FACEBOOK_CREDENTIAL_KEY);
+      sessionStorage.removeItem(PENDING_FACEBOOK_EMAIL_KEY);
+      return false;
+    }
+
+    const label = sessionStorage.getItem(REDIRECT_PROVIDER_KEY) ||
+      (result.providerId === 'facebook.com' ? 'Facebook' : 'Google');
+    sessionStorage.removeItem(REDIRECT_PROVIDER_KEY);
+
+    const savedCredential = sessionStorage.getItem(PENDING_FACEBOOK_CREDENTIAL_KEY);
+    if (savedCredential) {
+      pendingFacebookCredential = OAuthProvider.credentialFromJSON(JSON.parse(savedCredential));
+      pendingFacebookEmail = sessionStorage.getItem(PENDING_FACEBOOK_EMAIL_KEY) || '';
+      sessionStorage.removeItem(PENDING_FACEBOOK_CREDENTIAL_KEY);
+      sessionStorage.removeItem(PENDING_FACEBOOK_EMAIL_KEY);
+    }
+
+    await processOAuthResult(result, label);
+    return true;
+  } catch (err) {
+    const label = sessionStorage.getItem(REDIRECT_PROVIDER_KEY) || 'OAuth';
+    sessionStorage.removeItem(REDIRECT_PROVIDER_KEY);
+    sessionStorage.removeItem(PENDING_FACEBOOK_CREDENTIAL_KEY);
+    sessionStorage.removeItem(PENDING_FACEBOOK_EMAIL_KEY);
+    showOAuthError(`Đăng nhập ${label} bằng chuyển hướng thất bại.`, err);
+    return false;
   }
 }
 

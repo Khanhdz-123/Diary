@@ -519,14 +519,36 @@ function startRenamePage(pageId) {
 function bindEvents() {
   const sidebar = document.getElementById('sidebar');
   const openBtn = document.getElementById('openSidebarBtn');
-  document.getElementById('toggleSidebarInner').addEventListener('click', () => {
+  const closeSidebar = () => {
     sidebar.classList.add('collapsed');
     openBtn.style.display = 'flex';
-  });
-  openBtn.addEventListener('click', () => {
+  };
+  const openSidebar = () => {
     sidebar.classList.remove('collapsed');
     openBtn.style.display = 'none';
-  });
+  };
+  document.getElementById('toggleSidebarInner').addEventListener('click', closeSidebar);
+  openBtn.addEventListener('click', openSidebar);
+
+  let touchStart = null;
+  sidebar.addEventListener('touchstart', (event) => {
+    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    const touch = event.changedTouches[0];
+    touchStart = { x: touch.clientX, y: touch.clientY };
+  }, { passive: true });
+  sidebar.addEventListener('touchend', (event) => {
+    if (!touchStart) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    touchStart = null;
+    if (deltaX < -55 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      closeSidebar();
+    }
+  }, { passive: true });
+  sidebar.addEventListener('touchcancel', () => {
+    touchStart = null;
+  }, { passive: true });
 
   logoutBtn?.addEventListener('click', handleLogout);
 
